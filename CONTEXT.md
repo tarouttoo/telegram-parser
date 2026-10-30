@@ -32,6 +32,17 @@ labels (`agent:implement`, `agent:review`, `agent:update-branch`,
   `agent:explore` issue, the agent plans per-issue effects, and a separate
   apply job validates and applies the plan (issue bodies are untrusted
   input and never enter the shell).
+- **Converter** — the ready-for-agent converter (`agent-convert.yml`, no
+  upstream counterpart, ADR 0005): a Ticket labelled `ready-for-agent` (the
+  skills' "AFK-ready" role) is swapped to `agent:implement` once every
+  blocking edge is closed; edges come from native blocked-by relationships
+  with the body's `## Blocked by` section as fallback, and a blocker closing
+  re-scans its dependents. The label is the approval; the decision is a
+  deterministic script, not an agent.
+- **Canonical triage roles** — the five roles the skills speak in
+  (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`,
+  `wontfix`), mapped to this repo's label strings in
+  `docs/agents/triage.md`.
 - **Extraction** — the second, structured-output pass a run may take
   (`extraction.md`) to turn free-form agent output into typed JSON.
 - **PAT cascade** — label events fired by `GITHUB_TOKEN` never start other
@@ -57,10 +68,14 @@ labels (`agent:implement`, `agent:review`, `agent:update-branch`,
   never leaves the machine — it is not a CI secret.
 - **Spec issue** — a self-contained issue carrying a full feature spec
   (problem, solution, user stories, decisions). It is never handed to the
-  implement workflow itself; Tickets reference it as their parent.
+  implement workflow itself — the preflight refuses it when labelled
+  directly; when one of its Tickets runs, the spec is pulled in as the
+  `PARENT_CONTEXT` prompt arg. Tickets reference it as their parent.
 - **Ticket** — a vertical-slice issue derived from a Spec issue (as its
   child), sized for one agent run, with explicit blocking edges to other
-  Tickets. The unit of work the implement workflow acts on.
+  Tickets. The unit of work the implement workflow acts on: it has no
+  sub-issues of its own (one change per issue) and its run receives its
+  parent Spec issue as context.
 - **Ready-for-agent** — triage label from the skills vocabulary marking a
   Ticket approved for agent work. A converter hands it to the implement
   workflow (through the PAT cascade) once every blocking edge is closed.
@@ -74,6 +89,15 @@ labels (`agent:implement`, `agent:review`, `agent:update-branch`,
 - `docs/adr/` — architecture decision records. Add one when making a
   non-obvious, hard-to-reverse choice; read the relevant ones before
   changing pipeline behaviour.
+- `docs/agents/` — agent-facing conventions restored from upstream: the
+  canonical triage roles mapped to this repo's labels (`agents/triage.md`),
+  the GitHub issue-tracker command conventions (`agents/issue-tracker.md`),
+  how skills consume domain docs (`agents/domain.md`), and upstream
+  sandcastle-package contributor guides (`agents/adding-an-agent-provider.md`,
+  `agents/adding-an-issue-tracker.md`).
+- `.agents/skills/triage-repro/` — skill for interactively triaging an
+  issue number and attempting a reproduction; complements the label-driven
+  batch triage, which it does not replace.
 - `.sandcastle/CODING_STANDARDS.md` — coding standards the workflow agents
   apply to the host repo; they describe how code in an adopting repo
   should look.

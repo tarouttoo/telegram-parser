@@ -13,6 +13,9 @@ coding agents edit both the project code and the pipeline code.
 - **Code style in adopting repos** — `.sandcastle/CODING_STANDARDS.md` is
   what the workflow agents apply; do not edit it lightly, prompts reference
   it verbatim.
+- **Skill conventions** (triage labels, issue-tracker commands, domain-doc
+  layout) — read `docs/agents/`; the triage-repro skill also lives under
+  `.agents/skills/triage-repro/`.
 - **Adopter setup and upstream deviations** — `README.md`.
 
 ## Constraints

@@ -16,15 +16,19 @@ not Claude Code**. See [Deviations from upstream](#deviations-from-upstream).
 
 | Label | Workflow | What happens |
 |---|---|---|
-| `agent:implement` (issue) | `agent-implement.yml` | Preflight gates (refuses sub-issues / PRD-shaped issues / issues with an open collaborator PR), then an agent implements on an isolated branch and opens a draft PR that closes the issue, then labels the PR `agent:review`. |
+| `agent:implement` (issue) | `agent-implement.yml` | Preflight gates (refuses PRD-shaped issues / issues with an open collaborator PR; a child-of-spec Ticket passes and its parent Spec is pulled in as context), then an agent implements on an isolated branch and opens a draft PR that closes the issue, then labels the PR `agent:review`. |
 | `agent:implement` (PR) | `agent-implement-pr.yml` | Processes review feedback on an existing PR: replies to threads, addresses inline comments, pushes with a lease. |
 | `agent:review` | `agent-review.yml` | Reviews the PR, self-fixes findings on the branch, posts a PR review, replies to threads, marks the PR ready. |
 | `agent:update-branch` | `agent-update-branch.yml` | Resolves merge conflicts with `main` (always resolve, never abort) and pushes. |
 | `agent:explore` | `agent-explore.yml` | Batch triage: one agent run plans effects for every open `agent:explore` issue; a separate apply job validates the plan and applies it. Supports `workflow_dispatch` dry-run. |
+| `ready-for-agent` (issue) | `agent-convert.yml` | Converter (no upstream counterpart): re-evaluates the Ticket when labelled and whenever another issue closes. All blockers closed → swaps the label for `agent:implement` (added with `AGENT_PAT` so the implement workflow actually starts); open blockers → comments naming them and keeps waiting. Blocking edges come from the tracker's native blocked-by relationships, falling back to the body's `## Blocked by` section. |
 
-Every run posts a failure comment with a reason and the workflow-run link,
-and relabels the subject `agent:blocked`. Retrying means re-adding the
-trigger label named in that comment.
+Every agent run posts a failure comment with a reason and the workflow-run
+link, and relabels the subject `agent:blocked`. Retrying means re-adding the
+trigger label named in that comment. The `ready-for-agent` converter is the
+exception: it runs no agent, so a failed converter run is a plain workflow
+failure with no failure comment — retry it by removing and re-adding
+`ready-for-agent` on the affected Ticket.
 
 ## Adopting this template
 
@@ -156,5 +160,57 @@ Verbatim is the goal; every deviation is listed here.
    The `implement-pr` feedback pass refreshes a stale body, and the review
    pass audits the body's claims against the diff but never edits it
    (see `docs/adr/0001-agent-drafted-pr-bodies.md`).
+5. **Child-of-spec Tickets are implementable** — the implement preflight
+   admits a Ticket whose parent is another issue (upstream refuses any
+   sub-issue) and the implement pass pulls the parent Spec in as a
+   `PARENT_CONTEXT` prompt arg: upstream's own local parallel-planner
+   prompt ("If it has a parent PRD, pull that in too", pinned `a53e227`),
+   which its CI workflow never reached because of that refusal. The
+   PRD-shaped refusal and every other guardrail are unchanged
+   (rationale: `docs/adr/0004-child-of-spec-tickets-implementable.md`).
+6. **`docs/agents/` and the `triage-repro` skill restored** — the port
+   initially dropped upstream's agent-facing docs; they are carried back
+   verbatim, except the right-hand column of the label table in
+   [`docs/agents/triage.md`](docs/agents/triage.md), which that file tells
+   adopters to fill in: mapped to this repo's labels (`agent:explore`,
+   `agent:blocked`, `agent:implement`, `ready-for-human`; `wontfix` closes
+   the issue — no label). Note that `docs/agents/adding-an-agent-provider.md`,
+   `docs/agents/adding-an-issue-tracker.md` and the reproduction steps in
+   `.agents/skills/triage-repro/SKILL.md` describe the upstream sandcastle
+   package (`src/`, `sandcastle init`, Docker sandbox); this repo
+   consumes the pipeline as an npm dependency, so those references point at
+   upstream, not at files in this repo.
+7. **The `ready-for-agent` converter** — a sixth workflow,
+   `agent-convert.yml`, with no upstream counterpart: Tickets labelled
+   `ready-for-agent` (the triage skills' vocabulary, published by
+   construction by its `to-spec`/`to-tickets` flow) are handed to the
+   implement workflow once their blocking edges are all closed, re-firing on
+   `issues: closed` — no schedule. Edges come from the tracker's native
+   blocked-by relationships where available, falling back to parsing the
+   body's `## Blocked by` section in TypeScript (bodies stay untrusted
+   input, never in the shell); the hand-off label is added with `AGENT_PAT`,
+   degrading with the same warning explore's apply job emits when only
+   `GITHUB_TOKEN` is available (rationale:
+   [`docs/adr/0005-ready-for-agent-converter.md`](docs/adr/0005-ready-for-agent-converter.md);
+   day-to-day usage: [`docs/triage.md`](docs/triage.md)).
+8. **Branch-pushing workflows check out with `AGENT_PAT` when available** —
+   `agent-implement`, `agent-implement-pr`, `agent-review` and
+   `agent-update-branch` pass `token: ${{ secrets.AGENT_PAT ||
+   secrets.GITHUB_TOKEN }}` to `actions/checkout`, so `git push` uses the
+   PAT's persisted credentials while the `gh` API calls keep using
+   `GITHUB_TOKEN`. Upstream never pushes commits that create or update
+   files under `.github/workflows/`; this repo's agents build the pipeline
+   itself, and a plain `GITHUB_TOKEN` cannot push such commits — GitHub
+   refuses them ("refusing to allow a GitHub App to create or update
+   workflow … without `workflows` permission"), and `workflows` is not a
+   grantable scope in the Actions `permissions` block, so the token, not
+   the permission, is the only lever. (Observed in the template repo:
+   review runs on the ready-for-agent converter failed at their final
+   "Push branch" step, after the agent had finished, landing the PR
+   `agent:blocked`; `agent-implement` was immune only because it already
+   checked out with `AGENT_PAT`.) Without `AGENT_PAT` the `GITHUB_TOKEN`
+   fallback still pushes everything except workflow-file changes.
+   Contract-tested in
+   `.sandcastle/agent-workflows/shared/push-permissions.test.ts`.
 
 Prompt and workflow code text is otherwise unchanged from upstream.
