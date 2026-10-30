@@ -12,6 +12,6 @@
     "noUncheckedIndexedAccess": true,
     "noEmit": true
   },
-  "include": [".sandcastle/**/*.ts"],
+  "include": ["src/**/*.ts", ".sandcastle/**/*.ts"],
   "exclude": ["node_modules"]
 }
