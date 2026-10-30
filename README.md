@@ -63,6 +63,17 @@ npm run typecheck
 npm test
 ```
 
+## The parser
+
+The tool this repo exists for lives in `src/`. Until the GramJS adapter
+lands (ADR 0002), `npm run parse` is a walking skeleton (issue #3): it
+backfills every configured Channel (see `src/config/channels.ts`) through
+the `HistorySource` seam using a bundled fixture source — fully offline,
+no Telegram credentials. It appends one JSONL file per Channel into the
+gitignored `data/` directory, oldest post first, one Post per line
+(schema in `src/parse/post.ts`). `npm run parse @username` backfills a
+single configured Channel. Exit code is non-zero if any Channel failed.
+
 ## Attribution
 
 Pipeline files ported from [mattpocock/sandcastle](https://github.com/mattpocock/sandcastle)
