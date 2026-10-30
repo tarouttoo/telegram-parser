@@ -54,6 +54,11 @@ const readState = async (statePath: string): Promise<CheckpointState> => {
   return JSON.parse(content) as CheckpointState;
 };
 
+/** Atomically persist the checkpoint state file. */
+const writeState = async (statePath: string, state: CheckpointState): Promise<void> => {
+  await writeAtomically(statePath, `${JSON.stringify(state, null, 2)}\n`);
+};
+
 /**
  * Write a file so a crash cannot leave a torn or empty file behind: serialize
  * into a temp file, then rename it over the target (atomic on the same
@@ -134,7 +139,7 @@ const fetchAndStorePages = async (
       );
       await appendPosts(channel, filePath, page.rawMessages);
       state[channel] = { lastFetchedId, complete: false };
-      await writeAtomically(statePath, `${JSON.stringify(state, null, 2)}\n`);
+      await writeState(statePath, state);
     }
     if (!page.hasMore || page.rawMessages.length === 0) break;
     offsetId = Math.min(...page.rawMessages.map((message) => message.id));
@@ -171,7 +176,7 @@ export const runBackfill = async (options: BackfillOptions): Promise<BackfillRes
     checkpoint?.lastFetchedId ?? null,
   );
   state[options.channel] = finished;
-  await writeAtomically(statePath, `${JSON.stringify(state, null, 2)}\n`);
+  await writeState(statePath, state);
   await rewriteChronologically(filePath);
   return { channel: options.channel, filePath, postCount: fetched.length };
 };

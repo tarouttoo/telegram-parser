@@ -74,6 +74,13 @@ gitignored `data/` directory, oldest post first, one Post per line
 (schema in `src/parse/post.ts`). `npm run parse @username` backfills a
 single configured Channel. Exit code is non-zero if any Channel failed.
 
+Backfills are resumable (issue #5): each run keeps a per-Channel
+checkpoint in `data/checkpoint.json`, written atomically (temp file +
+rename) after every fetched page, so a crash can neither corrupt the
+state nor lose already-fetched posts. The next run resumes from the
+checkpoint's offset instead of refetching, and re-running a completed
+Channel is a no-op.
+
 ## Attribution
 
 Pipeline files ported from [mattpocock/sandcastle](https://github.com/mattpocock/sandcastle)
