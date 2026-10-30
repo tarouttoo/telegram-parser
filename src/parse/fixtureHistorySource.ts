@@ -1,4 +1,5 @@
 import type { ChannelHandle, HistorySource, RawMessage } from "./historySource";
+import { UnresolvableChannelError } from "./historySource";
 import {
   microstructureDailyMessages,
   orderflowFeedMessages,
@@ -34,7 +35,9 @@ export const createFixtureHistorySource = (options: FixtureSourceOptions): Histo
   fetchPage: (channel: ChannelHandle, offsetId?: number) => {
     const messages = options.messagesByChannel[channel];
     if (messages === undefined) {
-      throw new Error(`Fixture source has no messages for ${channel}`);
+      // A handle with no fixture history stands in for one Telegram would
+      // refuse to resolve (unresolvable or private, ADR 0002).
+      return Promise.reject(new UnresolvableChannelError(channel));
     }
     const { page, hasMore } = pageOf(messages, offsetId, options.pageSize);
     return Promise.resolve({ rawMessages: page, hasMore });

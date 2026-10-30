@@ -1,17 +1,19 @@
 #!/usr/bin/env tsx
 import { channels } from "./config/channels";
-import { runBackfill } from "./parse/backfill";
 import { bundledHistorySource } from "./parse/fixtureHistorySource";
-import type { ChannelHandle } from "./parse/historySource";
+import { runBackfills } from "./parse/run";
 
 /** Directory the per-channel JSONL files are appended into (gitignored). */
 const dataDir = "data";
 
 /**
- * Offline walking skeleton of `npm run parse` (issue #3): reads the
- * Channel config and drives the Backfill runner through the
- * HistorySource seam with the bundled fixture source — no Telegram
- * credentials, until the GramJS adapter ticket lands.
+ * `npm run parse` (issues #3 and #4): reads the Channel config and
+ * backfills every requested Channel through the HistorySource seam with
+ * the bundled fixture source — no Telegram credentials, until the GramJS
+ * adapter ticket lands. Channels are isolated: one that fails (port
+ * throws, unresolvable or private handle) is skipped and the rest still
+ * complete. Ends with a per-Channel summary and a non-zero exit code iff
+ * any Channel failed.
  *
  * Usage: npm run parse [@username]
  */
@@ -29,23 +31,25 @@ const main = async (): Promise<void> => {
     return;
   }
 
-  const failed: ChannelHandle[] = [];
-  for (const channel of selected) {
-    try {
-      const result = await runBackfill({ source: bundledHistorySource, channel, outDir: dataDir });
-      console.log(`${channel}: ${result.postCount} posts → ${result.filePath}`);
-    } catch (error) {
-      failed.push(channel);
-      const reason = error instanceof Error ? error.message : String(error);
-      console.error(`${channel}: backfill failed — ${reason}`);
+  const result = await runBackfills({
+    source: bundledHistorySource,
+    channels: selected,
+    outDir: dataDir,
+  });
+
+  console.log("Backfill summary:");
+  for (const outcome of result.outcomes) {
+    if (outcome.status === "backfilled") {
+      console.log(`  ${outcome.channel}: ${outcome.postCount} posts → ${outcome.filePath}`);
+    } else {
+      console.error(`  ${outcome.channel}: FAILED — ${outcome.reason}`);
     }
   }
-  if (failed.length > 0) {
-    console.error(`Done with failures (${failed.join(", ")}); the rest were backfilled.`);
-    process.exitCode = 1;
-    return;
-  }
-  console.log("All configured channels are backfilled.");
+  const backfilled = result.outcomes.filter((outcome) => outcome.status === "backfilled").length;
+  const closing = `Backfill finished: ${backfilled} of ${result.outcomes.length} channels backfilled.`;
+  if (result.exitCode === 0) console.log(closing);
+  else console.error(closing);
+  process.exitCode = result.exitCode;
 };
 
 await main();
