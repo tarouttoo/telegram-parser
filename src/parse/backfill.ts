@@ -88,11 +88,18 @@ const readStoredPosts = async (filePath: string): Promise<Post[]> => {
     .map((line) => JSON.parse(line) as Post);
 };
 
-/** Restore the oldest-to-newest timeline across pages and resumed runs. */
+/**
+ * Restore the oldest-to-newest timeline across pages and resumed runs. A
+ * crash between appending a page and advancing its Checkpoint makes the
+ * resumed run fetch that page again, so the rewrite also collapses repeated
+ * message ids, keeping the most recently fetched copy.
+ */
 const rewriteChronologically = async (filePath: string): Promise<void> => {
   const stored = await readStoredPosts(filePath);
-  stored.sort((a, b) => a.message_id - b.message_id);
-  await writeAtomically(filePath, serializePosts(stored));
+  const latestById = new Map<number, Post>();
+  for (const post of stored) latestById.set(post.message_id, post);
+  const chronological = [...latestById.values()].sort((a, b) => a.message_id - b.message_id);
+  await writeAtomically(filePath, serializePosts(chronological));
 };
 
 /** Append one page's Posts, oldest to newest, to the channel's JSONL file. */
@@ -176,7 +183,13 @@ export const runBackfill = async (options: BackfillOptions): Promise<BackfillRes
     checkpoint?.lastFetchedId ?? null,
   );
   state[options.channel] = finished;
-  await writeState(statePath, state);
+  // Rewrite before marking complete: a crash after the rewrite but before
+  // this final write leaves a restartable state (the next run fetches one
+  // empty page below the oldest id, rewrites idempotently, and marks the
+  // Checkpoint complete), whereas marking complete first could strand a
+  // page-ordered, never-rewritten JSONL behind a completed Checkpoint that
+  // no later run would touch.
   await rewriteChronologically(filePath);
+  await writeState(statePath, state);
   return { channel: options.channel, filePath, postCount: fetched.length };
 };

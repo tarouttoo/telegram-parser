@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { runBackfill } from "./backfill";
 import { createFixtureHistorySource } from "./fixtureHistorySource";
 import type { ChannelHandle, HistorySource, RawMessage } from "./historySource";
+import { toPost } from "./post";
 
 const unix = (iso: string): number => Date.parse(iso) / 1000;
 
@@ -475,6 +476,99 @@ describe("checkpoint and resume", () => {
     expect(result.postCount).toBe(3);
     const stored = await readJsonl(join(outDir, "microstructure_daily.jsonl"));
     expect(stored.map((post) => (post as { message_id: number }).message_id)).toEqual([40, 41, 42]);
+    expect(JSON.parse(await readFile(join(outDir, "checkpoint.json"), "utf8"))).toEqual({
+      "@microstructure_daily": { lastFetchedId: 40, complete: true },
+    });
+  });
+
+  test("collapses Posts a crash duplicated across the append and checkpoint gap", async () => {
+    const outDir = await tempDir();
+    const history = newestFirstHistory(40, 50);
+    const rawById = new Map(history.map((message) => [message.id, message]));
+    const line = (id: number): string => {
+      const raw = rawById.get(id);
+      if (raw === undefined) throw new Error(`no fixture message ${id}`);
+      return `${JSON.stringify(toPost("@microstructure_daily", raw))}\n`;
+    };
+    // Crash state between the two steps of a page write: pages (50,49) and
+    // (48,47) are already in the JSONL, but only page one's Checkpoint landed,
+    // so resuming at 49 fetches 48 and 47 a second time.
+    await writeFile(
+      join(outDir, "microstructure_daily.jsonl"),
+      [49, 50, 47, 48].map(line).join(""),
+    );
+    await writeFile(
+      join(outDir, "checkpoint.json"),
+      `${JSON.stringify({
+        "@microstructure_daily": { lastFetchedId: 49, complete: false },
+      })}\n`,
+    );
+    const fixture = createFixtureHistorySource({
+      messagesByChannel: { "@microstructure_daily": history },
+      pageSize: 2,
+    });
+    const offsets: (number | undefined)[] = [];
+    const resuming: HistorySource = {
+      fetchPage: (channel, offsetId) => {
+        offsets.push(offsetId);
+        return fixture.fetchPage(channel, offsetId);
+      },
+    };
+
+    const result = await runBackfill({ source: resuming, channel: "@microstructure_daily", outDir });
+
+    expect(offsets).toEqual([49, 47, 45, 43, 41]);
+    expect(result.postCount).toBe(9);
+    const stored = await readJsonl(join(outDir, "microstructure_daily.jsonl"));
+    expect(stored.map((post) => (post as { message_id: number }).message_id)).toEqual([
+      40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+    ]);
+    expect(JSON.parse(await readFile(join(outDir, "checkpoint.json"), "utf8"))).toEqual({
+      "@microstructure_daily": { lastFetchedId: 40, complete: true },
+    });
+  });
+
+  test("finishes a run that died after checkpointing the oldest page but before the rewrite", async () => {
+    const outDir = await tempDir();
+    const fixture = createFixtureHistorySource({
+      messagesByChannel: { "@microstructure_daily": newestFirstHistory(40, 50) },
+      pageSize: 2,
+    });
+    // Die on the seventh fetch: all six pages are appended and checkpointed
+    // (oldest id 40, incomplete) — the sixth page even claims more history —
+    // but the chronological rewrite never ran.
+    let attempts = 0;
+    const crashing: HistorySource = {
+      fetchPage: (channel, offsetId) => {
+        attempts += 1;
+        if (attempts > 6) return Promise.reject(new Error("connection reset"));
+        return fixture.fetchPage(channel, offsetId).then((page) =>
+          attempts === 6 ? { ...page, hasMore: true } : page,
+        );
+      },
+    };
+    await expect(
+      runBackfill({ source: crashing, channel: "@microstructure_daily", outDir }),
+    ).rejects.toThrow("connection reset");
+
+    // Resuming needs exactly one fetch below the oldest id to finish, and the
+    // file still comes out as one chronological timeline.
+    const offsets: (number | undefined)[] = [];
+    const resuming: HistorySource = {
+      fetchPage: (channel, offsetId) => {
+        offsets.push(offsetId);
+        return fixture.fetchPage(channel, offsetId);
+      },
+    };
+
+    const result = await runBackfill({ source: resuming, channel: "@microstructure_daily", outDir });
+
+    expect(offsets).toEqual([40]);
+    expect(result.postCount).toBe(0);
+    const stored = await readJsonl(join(outDir, "microstructure_daily.jsonl"));
+    expect(stored.map((post) => (post as { message_id: number }).message_id)).toEqual([
+      40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+    ]);
     expect(JSON.parse(await readFile(join(outDir, "checkpoint.json"), "utf8"))).toEqual({
       "@microstructure_daily": { lastFetchedId: 40, complete: true },
     });

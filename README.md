@@ -79,7 +79,10 @@ checkpoint in `data/checkpoint.json`, written atomically (temp file +
 rename) after every fetched page, so a crash can neither corrupt the
 state nor lose already-fetched posts. The next run resumes from the
 checkpoint's offset instead of refetching, and re-running a completed
-Channel is a no-op.
+Channel is a no-op. If a crash lands between writing a page and
+advancing the checkpoint, the resumed run fetches that page once more;
+the final chronological rewrite collapses the overlap, so the finished
+dataset carries no duplicate Posts.
 
 ## Attribution
 
