@@ -1,5 +1,5 @@
-import type { ChannelHandle, HistorySource } from "./historySource";
 import { runBackfill, type BackfillResult } from "./backfill";
+import type { ChannelHandle, HistorySource } from "./historySource";
 
 /** How one Channel fared in a multi-Channel run. */
 export type ChannelOutcome =

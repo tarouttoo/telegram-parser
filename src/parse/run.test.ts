@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { createFixtureHistorySource } from "./fixtureHistorySource";
+import { bundledHistorySource, createFixtureHistorySource } from "./fixtureHistorySource";
 import { UnresolvableChannelError } from "./historySource";
-import type { ChannelHandle, RawMessage } from "./historySource";
+import type { ChannelHandle, HistorySource, RawMessage } from "./historySource";
 import { runBackfills } from "./run";
 
 const unix = (iso: string): number => Date.parse(iso) / 1000;
@@ -59,6 +59,49 @@ describe("runBackfills through the HistorySource seam", () => {
       },
     ]);
     await expect(readFile(join(outDir, "orderflow_feed.jsonl"), "utf8")).resolves.not.toBe("");
+    expect(result.exitCode).toBe(1);
+  });
+
+  test("an arbitrary port failure is captured as the reason; earlier Channels still complete", async () => {
+    const outDir = await tempDir();
+    const source: HistorySource = {
+      fetchPage: (channel) =>
+        channel === "@microstructure_daily"
+          ? Promise.reject(new Error("port exploded"))
+          : Promise.resolve({ rawMessages: [], hasMore: false }),
+    };
+
+    const result = await runBackfills({
+      source,
+      channels: ["@orderflow_feed", "@microstructure_daily"],
+      outDir,
+    });
+
+    expect(result.outcomes).toEqual([
+      {
+        channel: "@orderflow_feed",
+        status: "backfilled",
+        filePath: join(outDir, "orderflow_feed.jsonl"),
+        postCount: 0,
+      },
+      { channel: "@microstructure_daily", status: "failed", reason: "port exploded" },
+    ]);
+    expect(result.exitCode).toBe(1);
+  });
+
+  test("a storage failure is captured rather than thrown out of the runner", async () => {
+    const blocker = join(await tempDir(), "blocker");
+    await writeFile(blocker, "a file, so mkdir below it fails");
+
+    const result = await runBackfills({
+      source: bundledHistorySource,
+      channels: ["@orderflow_feed"],
+      outDir: join(blocker, "data"),
+    });
+
+    expect(result.outcomes).toEqual([
+      { channel: "@orderflow_feed", status: "failed", reason: expect.any(String) },
+    ]);
     expect(result.exitCode).toBe(1);
   });
 
