@@ -55,6 +55,23 @@ export interface HistoryPage {
  */
 export type ChannelHandle = `@${string}`;
 
+/**
+ * Thrown by a HistorySource when a `@username` handle cannot be resolved
+ * to a Channel the run can read: it does not exist, is private, or the
+ * logged-in account cannot see it. The message names the handle so the
+ * per-Channel summary points at the config entry to fix.
+ */
+export class UnresolvableChannelError extends Error {
+  /** The `@username` handle that could not be resolved. */
+  readonly channel: ChannelHandle;
+
+  constructor(channel: ChannelHandle) {
+    super(`${channel} is unresolvable or private`);
+    this.name = "UnresolvableChannelError";
+    this.channel = channel;
+  }
+}
+
 /** The narrow port the Backfill runner pulls channel history through. */
 export interface HistorySource {
   /**
@@ -63,6 +80,8 @@ export interface HistorySource {
    * @param channel - the `@username` handle to fetch
    * @param offsetId - return only messages with an id below this one;
    *   omitted for the first (newest) page
+   * @throws {UnresolvableChannelError} when the handle is unresolvable or
+   *   private
    */
   fetchPage(channel: ChannelHandle, offsetId?: number): Promise<HistoryPage>;
 }

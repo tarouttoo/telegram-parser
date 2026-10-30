@@ -72,7 +72,11 @@ the `HistorySource` seam using a bundled fixture source — fully offline,
 no Telegram credentials. It appends one JSONL file per Channel into the
 gitignored `data/` directory, oldest post first, one Post per line
 (schema in `src/parse/post.ts`). `npm run parse @username` backfills a
-single configured Channel. Exit code is non-zero if any Channel failed.
+single configured Channel. Channels are isolated (issue #4): one that
+fails — the port throws, or the handle is unresolvable or private — is
+skipped and the rest still complete; the run ends with a per-Channel
+summary, and the exit code is non-zero if and only if any Channel
+failed.
 
 ## Attribution
 
