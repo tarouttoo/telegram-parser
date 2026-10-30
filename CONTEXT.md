@@ -57,10 +57,14 @@ labels (`agent:implement`, `agent:review`, `agent:update-branch`,
   never leaves the machine — it is not a CI secret.
 - **Spec issue** — a self-contained issue carrying a full feature spec
   (problem, solution, user stories, decisions). It is never handed to the
-  implement workflow itself; Tickets reference it as their parent.
+  implement workflow itself — the preflight refuses it when labelled
+  directly; when one of its Tickets runs, the spec is pulled in as the
+  `PARENT_CONTEXT` prompt arg. Tickets reference it as their parent.
 - **Ticket** — a vertical-slice issue derived from a Spec issue (as its
   child), sized for one agent run, with explicit blocking edges to other
-  Tickets. The unit of work the implement workflow acts on.
+  Tickets. The unit of work the implement workflow acts on: it has no
+  sub-issues of its own (one change per issue) and its run receives its
+  parent Spec issue as context.
 - **Ready-for-agent** — triage label from the skills vocabulary marking a
   Ticket approved for agent work. A converter hands it to the implement
   workflow (through the PAT cascade) once every blocking edge is closed.
