@@ -50,6 +50,11 @@ labels (`agent:implement`, `agent:review`, `agent:update-branch`,
   written atomically (temp file + rename) after every fetched page. A
   Backfill resumes from its Checkpoint instead of refetching; re-running a
   completed Channel is a no-op.
+- **Session file** — the gitignored `telegram.session` in the repo root:
+  the GramJS session string persisted after the one-time interactive
+  `api_id`/`api_hash` login (ADR 0002). Later runs reuse it without
+  prompts; deleting it logs the account out locally. A personal session
+  never leaves the machine — it is not a CI secret.
 - **Spec issue** — a self-contained issue carrying a full feature spec
   (problem, solution, user stories, decisions). It is never handed to the
   implement workflow itself; Tickets reference it as their parent.
