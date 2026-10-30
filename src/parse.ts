@@ -1,6 +1,5 @@
 #!/usr/bin/env tsx
 import { channels } from "./config/channels";
-import { microstructureDailyMessages, orderflowFeedMessages } from "./config/fixtureMessages";
 import { runBackfill } from "./parse/backfill";
 import { bundledHistorySource } from "./parse/fixtureHistorySource";
 import type { ChannelHandle } from "./parse/historySource";

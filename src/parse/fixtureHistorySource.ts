@@ -7,7 +7,7 @@ import {
 /** Inputs for building a fixture HistorySource. */
 export interface FixtureSourceOptions {
   /** The bundled raw messages per `@username` handle, newest first. */
-  readonly messagesByChannel: Readonly<Record<string, readonly RawMessage[]>>;
+  readonly messagesByChannel: Partial<Record<ChannelHandle, readonly RawMessage[]>>;
   /** How many messages one page serves; small sizes exercise pagination. */
   readonly pageSize: number;
 }

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { runBackfill } from "./backfill";
 import { createFixtureHistorySource } from "./fixtureHistorySource";
-import type { RawMessage } from "./historySource";
+import type { ChannelHandle, HistorySource, RawMessage } from "./historySource";
 
 const unix = (iso: string): number => Date.parse(iso) / 1000;
 
@@ -270,6 +270,39 @@ describe("runBackfill through the HistorySource seam", () => {
     expect((stored[1] as { message_id: number }).message_id).toBe(50);
   });
 
+  test("stops paging when a source reports more history but serves an empty page", async () => {
+    const outDir = await tempDir();
+    const source: HistorySource = {
+      fetchPage: (channel: ChannelHandle, offsetId?: number) =>
+        Promise.resolve(
+          offsetId === undefined
+            ? {
+                rawMessages: [
+                  {
+                    id: 50,
+                    channelId: 2109884710,
+                    date: unix("2024-01-01T09:30:00Z"),
+                    editDate: null,
+                    text: "the only post",
+                    views: null,
+                    forwards: null,
+                    fwdFrom: null,
+                    media: null,
+                    groupedId: null,
+                  },
+                ],
+                hasMore: true,
+              }
+            : { rawMessages: [], hasMore: true },
+        ),
+    };
+
+    const result = await runBackfill({ source, channel: "@microstructure_daily", outDir });
+
+    expect(result.postCount).toBe(1);
+    expect(await readJsonl(result.filePath)).toHaveLength(1);
+  });
+
   test("maps a plain post onto the full Post schema", async () => {
     const outDir = await tempDir();
     const rawMessage: RawMessage = {
@@ -311,5 +344,18 @@ describe("runBackfill through the HistorySource seam", () => {
         grouped_id: null,
       },
     ]);
+  });
+
+  test("backfills an empty history into an empty JSONL file", async () => {
+    const outDir = await tempDir();
+    const source = createFixtureHistorySource({
+      messagesByChannel: { "@microstructure_daily": [] },
+      pageSize: 2,
+    });
+
+    const result = await runBackfill({ source, channel: "@microstructure_daily", outDir });
+
+    expect(result.postCount).toBe(0);
+    expect(await readFile(result.filePath, "utf8")).toBe("");
   });
 });
