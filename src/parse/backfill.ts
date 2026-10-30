@@ -1,5 +1,6 @@
-import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { writeAtomically } from "../fs/writeAtomically";
 import type { ChannelHandle, HistorySource, RawMessage } from "./historySource";
 import { toPost } from "./post";
 import type { Post } from "./post";
@@ -57,17 +58,6 @@ const readState = async (statePath: string): Promise<CheckpointState> => {
 /** Atomically persist the checkpoint state file. */
 const writeState = async (statePath: string, state: CheckpointState): Promise<void> => {
   await writeAtomically(statePath, `${JSON.stringify(state, null, 2)}\n`);
-};
-
-/**
- * Write a file so a crash cannot leave a torn or empty file behind: serialize
- * into a temp file, then rename it over the target (atomic on the same
- * directory).
- */
-const writeAtomically = async (filePath: string, content: string): Promise<void> => {
-  const tempPath = `${filePath}.tmp`;
-  await writeFile(tempPath, content, "utf8");
-  await rename(tempPath, filePath);
 };
 
 const serializePosts = (posts: readonly Post[]): string =>

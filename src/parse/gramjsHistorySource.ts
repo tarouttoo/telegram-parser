@@ -14,9 +14,10 @@ export interface GramjsHistoryClient {
    *
    * @param peer - the `@username` handle to resolve
    * @throws GramJS raises RPC errors (`USERNAME_NOT_OCCUPIED`,
-   *   `CHANNEL_INVALID`, ...) for handles it cannot resolve, and a plain
-   *   "Could not find the input entity" error when no cached or resolvable
-   *   entity exists
+   *   `CHANNEL_INVALID`, ...) for handles it cannot resolve — the occupied
+   *   username case re-worded into a plain "No user has ... as username"
+   *   error — and "Could not find the input entity" when no cached or
+   *   resolvable entity exists
    */
   getEntity(peer: string): Promise<unknown>;
   /**
@@ -154,12 +155,21 @@ export const createGramjsHistorySource = (options: GramjsSourceOptions): History
         throw error;
       }
       await pace();
-      const messages = await honoringFloodWaits(() =>
-        client.getMessages(entity, {
-          limit: PAGE_SIZE,
-          ...(offsetId === undefined ? {} : { offsetId }),
-        }),
-      );
+      // A channel that resolves but cannot be read — private, or the
+      // account cannot see it — is refused by the history endpoint, not by
+      // resolution, so the port's unresolvable mapping covers this call too.
+      let messages: readonly unknown[];
+      try {
+        messages = await honoringFloodWaits(() =>
+          client.getMessages(entity, {
+            limit: PAGE_SIZE,
+            ...(offsetId === undefined ? {} : { offsetId }),
+          }),
+        );
+      } catch (error) {
+        if (isUnresolvable(error)) throw new UnresolvableChannelError(channel);
+        throw error;
+      }
       return {
         rawMessages: messages.map(toRawMessage),
         // A full page may have older messages below it; a short page
@@ -173,17 +183,23 @@ export const createGramjsHistorySource = (options: GramjsSourceOptions): History
 };
 
 /**
- * Whether a handle-resolution failure means "Telegram cannot show this
- * channel to this account" — it does not exist, is private, or the
- * logged-in account cannot see it — rather than a transient (network)
- * fault that should surface as its own per-channel failure.
+ * Whether a Telegram failure means "this account cannot read this
+ * channel" — it does not exist, is private, or the logged-in account
+ * cannot see it — rather than a transient (network) fault that should
+ * surface as its own per-channel failure. Covers both requests the
+ * adapter makes: handle resolution and the history endpoint (a private
+ * channel resolves but is refused there).
  */
 const isUnresolvable = (error: unknown): boolean => {
   if (error instanceof errors.RPCError) {
     return UNRESOLVABLE_RPC_ERRORS.has(error.errorMessage);
   }
+  if (!(error instanceof Error)) return false;
   return (
-    error instanceof Error && error.message.startsWith("Could not find the input entity")
+    error.message.startsWith("Could not find the input entity") ||
+    // GramJS re-words a USERNAME_NOT_OCCUPIED refusal during resolution
+    // into this plain error.
+    error.message.startsWith("No user has ")
   );
 };
 

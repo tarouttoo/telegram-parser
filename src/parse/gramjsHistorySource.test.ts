@@ -191,6 +191,42 @@ describe("the GramJS adapter", () => {
     );
   });
 
+  test("raises UnresolvableChannelError for the re-worded unoccupied-username refusal", async () => {
+    const client = fakeClient([]);
+    client.getEntity = () =>
+      Promise.reject(new Error('No user has "never_occupied" as username'));
+    const source = createGramjsHistorySource({ client, sleep: () => Promise.resolve() });
+
+    await expect(source.fetchPage("@never_occupied")).rejects.toMatchObject({
+      name: "UnresolvableChannelError",
+      channel: "@never_occupied",
+    });
+  });
+
+  test("raises UnresolvableChannelError when a resolvable channel refuses to be read", async () => {
+    // A private channel resolves fine; the history endpoint is where the
+    // refusal surfaces — still unresolvable to a channel the run can read.
+    const client = fakeClient([]);
+    client.getMessages = () =>
+      Promise.reject(new errors.RPCError("CHANNEL_PRIVATE", undefined as never));
+    const source = createGramjsHistorySource({ client, sleep: () => Promise.resolve() });
+
+    await expect(source.fetchPage("@vanishing_act")).rejects.toMatchObject({
+      name: "UnresolvableChannelError",
+      channel: "@vanishing_act",
+    });
+  });
+
+  test("propagates transient failures of the history request un-mapped", async () => {
+    const client = fakeClient([]);
+    client.getMessages = () => Promise.reject(new Error("disconnect timed out"));
+    const source = createGramjsHistorySource({ client, sleep: () => Promise.resolve() });
+
+    await expect(source.fetchPage("@microstructure_daily")).rejects.toThrow(
+      "disconnect timed out",
+    );
+  });
+
   test("propagates transient failures instead of calling them unresolvable", async () => {
     const client = fakeClient([]);
     client.getEntity = () => Promise.reject(new Error("disconnect timed out"));

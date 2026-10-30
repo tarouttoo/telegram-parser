@@ -1,7 +1,8 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
+import { writeAtomically } from "../fs/writeAtomically";
 
 /**
  * Where the persisted GramJS session string lives: next to the data
@@ -86,7 +87,9 @@ export const connectGramjsClient = async (): Promise<TelegramClient> => {
   });
   const currentSession = session.save();
   if (currentSession !== savedSession) {
-    await writeFile(sessionFileName, `${currentSession}\n`, "utf8");
+    // Atomic like every other file a crash would make the caller redo
+    // work for — a torn session string means the interactive login again.
+    await writeAtomically(sessionFileName, `${currentSession}\n`);
   }
   return client;
 };
