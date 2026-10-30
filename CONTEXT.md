@@ -7,8 +7,9 @@ new concept.
 
 ## What this repo is
 
-**telegram-parser** — a tool for parsing Telegram data (scope to be
-defined in this section as the project takes shape). The repo runs on the
+**telegram-parser** — a tool that backfills and stores **Posts** from a
+configured list of public Telegram **Channels** (HFT-themed) as a dataset.
+Messages in discussion chats (comments) are out of scope. The repo runs on the
 same infrastructure the template provides: a label-driven agent pipeline
 (pi CLI on GitHub Actions). Issues and PRs are worked on by adding trigger
 labels (`agent:implement`, `agent:review`, `agent:update-branch`,
@@ -36,6 +37,23 @@ labels (`agent:implement`, `agent:review`, `agent:update-branch`,
 - **PAT cascade** — label events fired by `GITHUB_TOKEN` never start other
   workflows; `AGENT_PAT` is used where a workflow must trigger another one
   (e.g. implement requesting review).
+- **Channel** — a public Telegram channel from the configured list; the
+  source of Posts. Referred to by `@username` in config, keyed internally by
+  its numeric channel id.
+- **Post** — a message published in a Channel (not in a chat). The unit of
+  parsed data: date, text, views, forwards, media metadata. Comments left in
+  the channel's linked discussion chat are out of scope.
+- **Backfill** — the initial full-history fetch of a Channel's Posts, from
+  the channel's creation up to now, respecting Telegram rate limits.
+- **Spec issue** — a self-contained issue carrying a full feature spec
+  (problem, solution, user stories, decisions). It is never handed to the
+  implement workflow itself; Tickets reference it as their parent.
+- **Ticket** — a vertical-slice issue derived from a Spec issue (as its
+  child), sized for one agent run, with explicit blocking edges to other
+  Tickets. The unit of work the implement workflow acts on.
+- **Ready-for-agent** — triage label from the skills vocabulary marking a
+  Ticket approved for agent work. A converter hands it to the implement
+  workflow (through the PAT cascade) once every blocking edge is closed.
 
 ## Where things live
 
