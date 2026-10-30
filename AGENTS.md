@@ -1,0 +1,23 @@
+# AGENTS.md
+
+This repo (**telegram-parser**) runs a label-driven agent pipeline (pi CLI on
+GitHub Actions), scaffolded from the agent-pipeline-template (a port of
+mattpocock/sandcastle). Agents run here via the `agent:*` labels; humans and
+coding agents edit both the project code and the pipeline code.
+
+## Navigation
+
+- **Naming or domain questions** — read `CONTEXT.md` (glossary) first.
+- **Changing pipeline behaviour** — check `docs/adr/` for prior decisions;
+  add an ADR when making a non-obvious, hard-to-reverse choice.
+- **Code style in adopting repos** — `.sandcastle/CODING_STANDARDS.md` is
+  what the workflow agents apply; do not edit it lightly, prompts reference
+  it verbatim.
+- **Adopter setup and upstream deviations** — `README.md`.
+
+## Constraints
+
+- Files under `.sandcastle/agent-workflows/` and `.github/workflows/` are a
+  verbatim port of upstream (modulo the documented deviations in
+  `README.md`). Verify against upstream before restructuring.
+- Before finishing: `npm run typecheck` and `npm test` must pass.
