@@ -65,18 +65,15 @@ npm test
 
 ## The parser
 
-The tool this repo exists for lives in `src/`. Until the GramJS adapter
-lands (ADR 0002), `npm run parse` is a walking skeleton (issue #3): it
-backfills every configured Channel (see `src/config/channels.ts`) through
-the `HistorySource` seam using a bundled fixture source — fully offline,
-no Telegram credentials. It appends one JSONL file per Channel into the
-gitignored `data/` directory, oldest post first, one Post per line
-(schema in `src/parse/post.ts`). `npm run parse @username` backfills a
-single configured Channel. Channels are isolated (issue #4): one that
-fails — the port throws, or the handle is unresolvable or private — is
-skipped and the rest still complete; the run ends with a per-Channel
-summary, and the exit code is non-zero if and only if any Channel
-failed.
+The tool this repo exists for lives in `src/`. `npm run parse` backfills
+every configured Channel (see `src/config/channels.ts`) through the
+`HistorySource` seam, appending one JSONL file per Channel — oldest post
+first, one Post per line (schema in `src/parse/post.ts`).
+`npm run parse @username` backfills a single configured Channel. Channels
+are isolated (issue #4): one that fails — the port throws, or the handle
+is unresolvable or private — is skipped and the rest still complete; the
+run ends with a per-Channel summary, and the exit code is non-zero if and
+only if any Channel failed.
 
 Backfills are resumable (issue #5): each run keeps a per-Channel
 checkpoint in `data/checkpoint.json`, written atomically (temp file +
@@ -87,6 +84,41 @@ Channel is a no-op. If a crash lands between writing a page and
 advancing the checkpoint, the resumed run fetches that page once more;
 the final chronological rewrite collapses the overlap, so the finished
 dataset carries no duplicate Posts.
+
+By default the run goes through the GramJS adapter (issue #6, ADR 0002),
+which speaks MTProto under your own Telegram account: it paces sustained
+fetching at about one request per second and honors flood-waits by
+sleeping exactly as long as Telegram demands. `npm run parse -- --fixture`
+runs the bundled fixture source instead — fully offline, writing to
+`data/fixture/` so fixture data can never mix with the real dataset
+through the shared checkpoint — and needs no credentials; it is for dev
+and tests, never for the dataset.
+
+## First run
+
+The real backfill needs a one-time interactive login (ADR 0002 — a bot
+cannot read channel history, and the session must be a personal one on
+your machine, never in CI):
+
+1. Create an application at <https://my.telegram.org> (API development
+   tools) to get an `api_id` and an `api_hash`.
+2. Export them in your shell:
+
+   ```sh
+   export TELEGRAM_API_ID=123456
+   export TELEGRAM_API_HASH=your_api_hash
+   ```
+
+3. Run `npm run parse`. The first run asks for your phone number, the
+   login code Telegram sends you, and (if enabled) your two-factor
+   password, then stores the session in the gitignored
+   `telegram.session` file. Every later run reuses that session — no
+   prompts.
+4. Delete `telegram.session` to log out and start the login over
+   (e.g. if Telegram invalidates the session).
+
+Posts land in the gitignored `data/` directory; interrupt the run at any
+time and start it again — it resumes from `data/checkpoint.json`.
 
 ## Attribution
 
