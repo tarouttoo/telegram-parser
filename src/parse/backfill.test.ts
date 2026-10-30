@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -357,5 +357,42 @@ describe("runBackfill through the HistorySource seam", () => {
 
     expect(result.postCount).toBe(0);
     expect(await readFile(result.filePath, "utf8")).toBe("");
+  });
+});
+
+describe("checkpoint and resume", () => {
+  /** Fixture history for ids `oldestId..newestId`, stored newest first as Telegram serves it. */
+  const newestFirstHistory = (oldestId: number, newestId: number): RawMessage[] =>
+    Array.from({ length: newestId - oldestId + 1 }, (_, index) => {
+      const id = newestId - index;
+      return {
+        id,
+        channelId: 2109884710,
+        date: unix("2024-01-01T09:30:00Z") + (id - oldestId) * 60,
+        editDate: null,
+        text: `post ${id}`,
+        views: null,
+        forwards: null,
+        fwdFrom: null,
+        media: null,
+        groupedId: null,
+      };
+    });
+
+  test("records a completed per-channel checkpoint and leaves no temp files behind", async () => {
+    const outDir = await tempDir();
+    const source = createFixtureHistorySource({
+      messagesByChannel: { "@microstructure_daily": newestFirstHistory(40, 50) },
+      pageSize: 2,
+    });
+
+    const result = await runBackfill({ source, channel: "@microstructure_daily", outDir });
+
+    expect(result.postCount).toBe(11);
+    expect(JSON.parse(await readFile(join(outDir, "checkpoint.json"), "utf8"))).toEqual({
+      "@microstructure_daily": { lastFetchedId: 40, complete: true },
+    });
+    const entries = await readdir(outDir);
+    expect(entries.filter((entry) => entry.endsWith(".tmp"))).toEqual([]);
   });
 });
