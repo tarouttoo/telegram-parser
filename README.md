@@ -193,5 +193,24 @@ Verbatim is the goal; every deviation is listed here.
    `GITHUB_TOKEN` is available (rationale:
    [`docs/adr/0005-ready-for-agent-converter.md`](docs/adr/0005-ready-for-agent-converter.md);
    day-to-day usage: [`docs/triage.md`](docs/triage.md)).
+8. **Branch-pushing workflows check out with `AGENT_PAT` when available** —
+   `agent-implement`, `agent-implement-pr`, `agent-review` and
+   `agent-update-branch` pass `token: ${{ secrets.AGENT_PAT ||
+   secrets.GITHUB_TOKEN }}` to `actions/checkout`, so `git push` uses the
+   PAT's persisted credentials while the `gh` API calls keep using
+   `GITHUB_TOKEN`. Upstream never pushes commits that create or update
+   files under `.github/workflows/`; this repo's agents build the pipeline
+   itself, and a plain `GITHUB_TOKEN` cannot push such commits — GitHub
+   refuses them ("refusing to allow a GitHub App to create or update
+   workflow … without `workflows` permission"), and `workflows` is not a
+   grantable scope in the Actions `permissions` block, so the token, not
+   the permission, is the only lever. (Observed in the template repo:
+   review runs on the ready-for-agent converter failed at their final
+   "Push branch" step, after the agent had finished, landing the PR
+   `agent:blocked`; `agent-implement` was immune only because it already
+   checked out with `AGENT_PAT`.) Without `AGENT_PAT` the `GITHUB_TOKEN`
+   fallback still pushes everything except workflow-file changes.
+   Contract-tested in
+   `.sandcastle/agent-workflows/shared/push-permissions.test.ts`.
 
 Prompt and workflow code text is otherwise unchanged from upstream.
