@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-hero/sandcastle": "^0.12.0",
+    "telegram": "^2.26.22",
     "tsx": "^4.23.15"
   },
   "devDependencies": {
