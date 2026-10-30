@@ -379,6 +379,107 @@ describe("checkpoint and resume", () => {
       };
     });
 
+  test("resumes an interrupted run from the checkpoint without refetching", async () => {
+    const outDir = await tempDir();
+    const fixture = createFixtureHistorySource({
+      messagesByChannel: { "@microstructure_daily": newestFirstHistory(40, 50) },
+      pageSize: 2,
+    });
+    // First run dies mid-paging: the port serves three pages, then blows up.
+    let attempts = 0;
+    const crashing: HistorySource = {
+      fetchPage: (channel, offsetId) => {
+        attempts += 1;
+        if (attempts > 3) return Promise.reject(new Error("connection reset"));
+        return fixture.fetchPage(channel, offsetId);
+      },
+    };
+    await expect(
+      runBackfill({ source: crashing, channel: "@microstructure_daily", outDir }),
+    ).rejects.toThrow("connection reset");
+
+    // The interrupted run stored its six posts and checkpointed mid-history.
+    expect(JSON.parse(await readFile(join(outDir, "checkpoint.json"), "utf8"))).toEqual({
+      "@microstructure_daily": { lastFetchedId: 45, complete: false },
+    });
+
+    // Second run: every fetch starts below the checkpoint, nothing refetched.
+    const offsets: (number | undefined)[] = [];
+    const resuming: HistorySource = {
+      fetchPage: (channel, offsetId) => {
+        offsets.push(offsetId);
+        return fixture.fetchPage(channel, offsetId);
+      },
+    };
+
+    const result = await runBackfill({ source: resuming, channel: "@microstructure_daily", outDir });
+
+    expect(offsets).toEqual([45, 43, 41]);
+    expect(result.postCount).toBe(5);
+    const stored = await readJsonl(join(outDir, "microstructure_daily.jsonl"));
+    expect(stored.map((post) => (post as { message_id: number }).message_id)).toEqual([
+      40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+    ]);
+    expect(JSON.parse(await readFile(join(outDir, "checkpoint.json"), "utf8"))).toEqual({
+      "@microstructure_daily": { lastFetchedId: 40, complete: true },
+    });
+  });
+
+  test("re-running a completed channel fetches nothing and leaves the dataset untouched", async () => {
+    const outDir = await tempDir();
+    const fixture = createFixtureHistorySource({
+      messagesByChannel: { "@microstructure_daily": newestFirstHistory(40, 42) },
+      pageSize: 2,
+    });
+    await runBackfill({ source: fixture, channel: "@microstructure_daily", outDir });
+    const jsonlPath = join(outDir, "microstructure_daily.jsonl");
+    const jsonlBefore = await readFile(jsonlPath, "utf8");
+    const stateBefore = await readFile(join(outDir, "checkpoint.json"), "utf8");
+
+    const result = await runBackfill({
+      source: { fetchPage: () => Promise.reject(new Error("must not fetch a completed channel")) },
+      channel: "@microstructure_daily",
+      outDir,
+    });
+
+    expect(result.postCount).toBe(0);
+    expect(await readFile(jsonlPath, "utf8")).toBe(jsonlBefore);
+    expect(await readFile(join(outDir, "checkpoint.json"), "utf8")).toBe(stateBefore);
+  });
+
+  test("takes the resume offset from the checkpoint, not from the output file", async () => {
+    const outDir = await tempDir();
+    const fixture = createFixtureHistorySource({
+      messagesByChannel: { "@microstructure_daily": newestFirstHistory(40, 44) },
+      pageSize: 2,
+    });
+    // Hand-crafted mid-history checkpoint with no stored posts behind it: the
+    // state file — not the (absent) JSONL — decides where fetching continues.
+    await writeFile(
+      join(outDir, "checkpoint.json"),
+      `${JSON.stringify({
+        "@microstructure_daily": { lastFetchedId: 43, complete: false },
+      })}\n`,
+    );
+    const offsets: (number | undefined)[] = [];
+    const resuming: HistorySource = {
+      fetchPage: (channel, offsetId) => {
+        offsets.push(offsetId);
+        return fixture.fetchPage(channel, offsetId);
+      },
+    };
+
+    const result = await runBackfill({ source: resuming, channel: "@microstructure_daily", outDir });
+
+    expect(offsets).toEqual([43, 41]);
+    expect(result.postCount).toBe(3);
+    const stored = await readJsonl(join(outDir, "microstructure_daily.jsonl"));
+    expect(stored.map((post) => (post as { message_id: number }).message_id)).toEqual([40, 41, 42]);
+    expect(JSON.parse(await readFile(join(outDir, "checkpoint.json"), "utf8"))).toEqual({
+      "@microstructure_daily": { lastFetchedId: 40, complete: true },
+    });
+  });
+
   test("records a completed per-channel checkpoint and leaves no temp files behind", async () => {
     const outDir = await tempDir();
     const source = createFixtureHistorySource({
