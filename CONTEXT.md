@@ -45,6 +45,11 @@ labels (`agent:implement`, `agent:review`, `agent:update-branch`,
   the channel's linked discussion chat are out of scope.
 - **Backfill** — the initial full-history fetch of a Channel's Posts, from
   the channel's creation up to now, respecting Telegram rate limits.
+- **Checkpoint** — the per-Channel resume position (`lastFetchedId` +
+  `complete`) held in the JSON state file next to the JSONL output and
+  written atomically (temp file + rename) after every fetched page. A
+  Backfill resumes from its Checkpoint instead of refetching; re-running a
+  completed Channel is a no-op.
 - **Spec issue** — a self-contained issue carrying a full feature spec
   (problem, solution, user stories, decisions). It is never handed to the
   implement workflow itself; Tickets reference it as their parent.
