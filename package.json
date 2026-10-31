@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "parse": "tsx src/parse.ts",
+    "normalize": "tsx src/normalize.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

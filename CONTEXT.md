@@ -7,9 +7,15 @@ new concept.
 
 ## What this repo is
 
-**telegram-parser** — a tool that backfills and stores **Posts** from a
-configured list of public Telegram **Channels** (HFT-themed) as a dataset.
-Messages in discussion chats (comments) are out of scope. The repo runs on the
+**telegram-parser** — a knowledge pipeline over HFT-themed Telegram
+sources: it turns manual Telegram Desktop **Exports** into a curated
+knowledge base (thematic notes + a tagged post index). **Channels**
+(broadcast **Posts**) and chats (many-author discussions) are distinct
+source types; chats are a deferred source — the pipeline is being proven on
+Channels first. The original GramJS **Backfill** code is frozen — kept but no
+longer the data path (ADR 0006). Knowledge content is authored in
+interactive sessions and committed directly — it never flows through
+issues; issues drive only development of the repo's own code. The repo runs on the
 same infrastructure the template provides: a label-driven agent pipeline
 (pi CLI on GitHub Actions). Issues and PRs are worked on by adding trigger
 labels (`agent:implement`, `agent:review`, `agent:update-branch`,
@@ -55,7 +61,18 @@ labels (`agent:implement`, `agent:review`, `agent:update-branch`,
   parsed data: date, text, views, forwards, media metadata. Comments left in
   the channel's linked discussion chat are out of scope.
 - **Backfill** — the initial full-history fetch of a Channel's Posts, from
-  the channel's creation up to now, respecting Telegram rate limits.
+  the channel's creation up to now, respecting Telegram rate limits. Frozen
+  capability; superseded by manual Exports (ADR 0006).
+- **Export** — a manual Telegram Desktop history dump (`result.json`) for
+  one source, produced by a human and dropped into the repo. The source of
+  truth feeding the analysis pipeline (ADR 0006).
+- **Knowledge base** — the curated product of the pipeline: thematic Notes
+  plus a tagged index over source Posts. Consumed both by the human
+  (learning HFT theory) and by coding agents (background context for
+  building HFT software).
+- **Note** — a thematic document of the Knowledge base, distilled from
+  source Posts and citing the Posts it came from (source + message ids).
+  A Note without Post citations is not a Note.
 - **Checkpoint** — the per-Channel resume position (`lastFetchedId` +
   `complete`) held in the JSON state file next to the JSONL output and
   written atomically (temp file + rename) after every fetched page. A
@@ -82,6 +99,12 @@ labels (`agent:implement`, `agent:review`, `agent:update-branch`,
 
 ## Where things live
 
+- `knowledge/` — the committed Knowledge base: HFT-jargon glossary
+  (`GLOSSARY.md`), thematic notes, tagged post index. Raw Exports stay
+  local under `data/exports/<source>/` (gitignored); the intermediate
+  normalized post JSONL produced by `npm run normalize` stays local under
+  `data/normalized/` (gitignored, regenerable) — the committed index in
+  `knowledge/index/` references posts, never their full text.
 - `docs/labels.md` — the reference for every label the pipeline uses
   (trigger and lifecycle) and the adopter setup command.
 - `docs/triage.md` — how a human feeds work into the pipeline: triageable
