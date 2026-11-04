@@ -3,3 +3,4 @@ tmp/
 .env
 data/
 telegram.session
+__pycache__/
