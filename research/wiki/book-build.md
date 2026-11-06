@@ -49,3 +49,16 @@
 Добавить в сборку заголовки Частей из `outline.md` v3 (снимает путаницу
 ссылок вида «Части II–IV», см. [review-2026-11-05](review-2026-11-05.md)
 и [open-decisions](open-decisions.md)).
+
+## Релиз версии книги (конвенция, 2026-11-06)
+
+Пример — [book-v0.2.0](https://github.com/tarouttoo/telegram-parser/releases/tag/book-v0.2.0):
+
+1. Аннотированный тег `book-vX.Y.Z` на HEAD: сообщение
+   «Книга: <суть версии>» (не semver npm-пакета — это версия книги).
+2. `git push origin main book-vX.Y.Z`.
+3. GitHub-релиз через `gh release create book-vX.Y.Z research/book/BOOK.md
+   --title "Книга · vX.Y.Z — <суть>" --notes-file <файл>`.
+   **Ассет — BOOK.md всегда** (читательская сборка). Заголовок и стиль
+   заметки — по образцу v0.1.0/v0.2.0; статус-строка (🔶 черновик /
+   решение открытых пунктов — см. [open-decisions](open-decisions.md)).
